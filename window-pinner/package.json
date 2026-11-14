@@ -1,0 +1,22 @@
+{
+  "name": "window-pinner",
+  "version": "1.0.0",
+  "description": "Pin open Windows apps to a screen corner",
+  "author": "Shirwatel",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never"
+  },
+  "dependencies": { "koffi": "^2.9.0" },
+  "devDependencies": { "electron": "^33.0.0", "electron-builder": "^25.0.0" },
+  "build": {
+    "appId": "com.local.windowpinner",
+    "productName": "Window Pinner",
+    "asarUnpack": ["**/node_modules/koffi/**"],
+    "directories": { "output": "dist" },
+    "win": { "target": ["portable", "nsis"] },
+    "portable": { "artifactName": "WindowPinner-portable.exe" },
+    "nsis": { "artifactName": "WindowPinner-Setup.exe" }
+  }
+}

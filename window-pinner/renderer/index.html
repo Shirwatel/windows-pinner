@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Window Pinner</title>
+<style>
+  :root { --bg:#14161a; --panel:#1c1f25; --line:#2a2e36; --text:#e6e8ec; --mute:#8b93a1; --acc:#3b82f6; --ok:#22c55e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px "Segoe UI", system-ui, sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; }
+  header { padding:14px 18px; border-bottom:1px solid var(--line); font-weight:600; }
+  main { flex:1; display:grid; grid-template-columns: 1fr 340px; gap:14px; padding:14px; min-height:0; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; display:flex; flex-direction:column; min-height:0; }
+  h2 { margin:0 0 10px; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--mute); font-weight:600; }
+  input[type=text], input[type=number], select { width:100%; background:#12141a; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:7px 9px; font:inherit; }
+  .list { overflow:auto; flex:1; margin-top:8px; }
+  .item { padding:8px 10px; border-radius:6px; cursor:pointer; border:1px solid transparent; }
+  .item:hover { background:#242830; }
+  .item.sel { border-color:var(--acc); background:#1e2a40; }
+  .item .t { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .item .s { color:var(--mute); font-size:12px; }
+  .tag { font-size:11px; padding:1px 6px; border-radius:9px; margin-left:6px; background:#243044; color:#9cc0ff; }
+  .tag.pin { background:#173524; color:#7be0a0; }
+  label.row { display:flex; align-items:center; gap:8px; margin:8px 0; cursor:pointer; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .field { margin:8px 0; }
+  .field > span { display:block; color:var(--mute); font-size:12px; margin-bottom:4px; }
+  .corners { display:grid; grid-template-columns:1fr 1fr; gap:6px; width:150px; aspect-ratio:16/10; padding:6px; border:1px solid var(--line); border-radius:6px; background:#12141a; }
+  .corners button { border:1px dashed var(--line); background:transparent; border-radius:4px; cursor:pointer; }
+  .corners button.on { background:var(--acc); border-style:solid; border-color:var(--acc); }
+  .btns { display:flex; gap:8px; margin-top:10px; }
+  button.b { flex:1; padding:8px; border:0; border-radius:6px; background:var(--acc); color:#fff; font:inherit; cursor:pointer; }
+  button.b.alt { background:#2a2e36; }
+  button.b:disabled { opacity:.4; cursor:default; }
+  .rules { grid-column:1 / -1; max-height:170px; }
+  table { width:100%; border-collapse:collapse; }
+  td, th { padding:5px 8px; text-align:left; border-bottom:1px solid var(--line); font-weight:400; }
+  th { color:var(--mute); font-size:12px; }
+  .link { color:#f87171; cursor:pointer; }
+  footer { display:flex; gap:22px; padding:10px 18px; border-top:1px solid var(--line); color:var(--mute); }
+  footer label { display:flex; gap:6px; align-items:center; cursor:pointer; }
+  .empty { color:var(--mute); padding:16px 4px; }
+</style>
+</head>
+<body>
+<header>Window Pinner</header>
+<main>
+  <section>
+    <h2>Open windows</h2>
+    <input type="text" id="search" placeholder="Filter by title or program">
+    <div class="list" id="list"></div>
+  </section>
+
+  <section id="panel">
+    <h2>Pin settings</h2>
+    <div id="none" class="empty">Select a window from the list.</div>
+    <div id="form" hidden style="overflow:auto">
+      <div id="target" style="margin-bottom:6px;word-break:break-all"></div>
+      <div class="field"><span>Corner</span><div class="corners" id="corners"></div></div>
+      <div class="grid2">
+        <div class="field"><span>Margin (px)</span><input type="number" id="margin" min="0"></div>
+        <div class="field"><span>Display</span><select id="display"></select></div>
+        <div class="field"><span>Width (px)</span><input type="number" id="width" min="100" placeholder="keep"></div>
+        <div class="field"><span>Height (px)</span><input type="number" id="height" min="80" placeholder="keep"></div>
+      </div>
+      <button class="b alt" id="curSize" style="width:100%">Use current size</button>
+      <label class="row"><input type="checkbox" id="ontop"> Keep on top of other windows</label>
+      <label class="row"><input type="checkbox" id="auto"> Pin automatically whenever this app opens</label>
+      <div class="btns">
+        <button class="b" id="pinBtn">Pin now</button>
+        <button class="b alt" id="unpinBtn">Unpin</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="rules">
+    <h2>Saved apps</h2>
+    <div class="list" id="rules"></div>
+  </section>
+</main>
+<footer>
+  <label><input type="checkbox" id="sAuto"> Auto-pin enabled</label>
+  <label><input type="checkbox" id="sStart"> Start with Windows</label>
+  <label><input type="checkbox" id="sTray"> Keep running in the tray when closed</label>
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const POS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+let wins = [], cfg, sel = null, corner = 'bottom-right';
+
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+async function init() {
+  cfg = await api.getConfig();
+  const disp = await api.displays();
+  $('display').append(new Option('Display the window is on', 'current'));
+  disp.forEach((d) => $('display').append(new Option(d.label, d.id)));
+  POS.forEach((p) => { const b = el('button'); b.title = p; b.onclick = () => { corner = p; drawCorners(); }; b.dataset.p = p; $('corners').append(b); });
+  drawCorners(); bindSettings(); renderRules(); await refresh();
+  setInterval(refresh, 3000);
+}
+
+async function refresh() { wins = await api.listWindows(); renderList(); }
+
+function renderList() {
+  const q = $('search').value.toLowerCase();
+  const box = $('list'); box.replaceChildren();
+  wins.filter((w) => (w.title + w.exe).toLowerCase().includes(q)).forEach((w) => {
+    const d = el('div', 'item' + (sel && sel.hwnd === w.hwnd ? ' sel' : ''));
+    const t = el('div', 't', w.title);
+    if (w.pinned) t.append(el('span', 'tag pin', 'pinned'));
+    if (cfg.rules.some((r) => r.key === w.key && r.auto)) t.append(el('span', 'tag', 'auto'));
+    d.append(t, el('div', 's', `${w.exe}  ${w.size.w}x${w.size.h}`));
+    d.onclick = () => select(w);
+    box.append(d);
+  });
+}
+
+function select(w) {
+  sel = w;
+  const r = cfg.rules.find((x) => x.key === w.key) || {};
+  corner = r.corner || 'bottom-right';
+  $('margin').value = r.margin ?? 16;
+  $('width').value = r.width || ''; $('height').value = r.height || '';
+  $('ontop').checked = r.alwaysOnTop ?? true;
+  $('auto').checked = r.auto ?? true;
+  $('display').value = r.display || 'current';
+  $('target').textContent = `${w.title} (${w.exe})`;
+  $('none').hidden = true; $('form').hidden = false;
+  drawCorners(); renderList();
+}
+
+function drawCorners() { [...$('corners').children].forEach((b) => b.classList.toggle('on', b.dataset.p === corner)); }
+
+function readForm() {
+  return {
+    key: sel.key, name: sel.exe, corner, display: $('display').value,
+    margin: Math.max(0, +$('margin').value || 0),
+    width: +$('width').value || 0, height: +$('height').value || 0,
+    alwaysOnTop: $('ontop').checked, auto: $('auto').checked,
+  };
+}
+
+$('curSize').onclick = () => { if (sel) { $('width').value = sel.size.w; $('height').value = sel.size.h; } };
+$('pinBtn').onclick = async () => { if (!sel) return; cfg = await api.pin(sel.hwnd, readForm()); renderRules(); setTimeout(refresh, 200); };
+$('unpinBtn').onclick = async () => { if (!sel) return; await api.unpin(sel.hwnd); setTimeout(refresh, 200); };
+$('search').oninput = renderList;
+
+function renderRules() {
+  const box = $('rules'); box.replaceChildren();
+  if (!cfg.rules.length) { box.append(el('div', 'empty', 'Nothing saved yet. Pin a window to save its settings.')); return; }
+  const t = el('table'); const h = el('tr');
+  ['Program', 'Corner', 'Size', 'Auto', ''].forEach((x) => h.append(el('th', null, x)));
+  t.append(h);
+  cfg.rules.forEach((r, i) => {
+    const tr = el('tr');
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = r.auto;
+    cb.onchange = async () => { cfg.rules[i].auto = cb.checked; cfg = await api.saveConfig(cfg); renderList(); };
+    const del = el('span', 'link', 'Remove');
+    del.onclick = async () => { cfg.rules.splice(i, 1); cfg = await api.saveConfig(cfg); renderRules(); renderList(); };
+    const tdA = el('td'); tdA.append(cb); const tdD = el('td'); tdD.append(del);
+    tr.append(el('td', null, r.key.replace('|', '  ')), el('td', null, r.corner),
+      el('td', null, r.width && r.height ? `${r.width}x${r.height}` : 'unchanged'), tdA, tdD);
+    t.append(tr);
+  });
+  box.append(t);
+}
+
+function bindSettings() {
+  const map = { sAuto: 'autoPin', sStart: 'startWithWindows', sTray: 'tray' };
+  for (const [id, key] of Object.entries(map)) {
+    $(id).checked = cfg.settings[key];
+    $(id).onchange = async () => { cfg.settings[key] = $(id).checked; cfg = await api.saveConfig(cfg); };
+  }
+}
+
+init();
+</script>
+</body>
+</html>
