@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+defaults:
+  run:
+    working-directory: window-pinner
+
 jobs:
   build:
     runs-on: windows-latest
@@ -30,13 +34,13 @@ jobs:
         with:
           name: window-pinner-windows
           path: |
-            dist/WindowPinner-portable.exe
-            dist/WindowPinner-Setup.exe
+            window-pinner/dist/WindowPinner-portable.exe
+            window-pinner/dist/WindowPinner-Setup.exe
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/WindowPinner-portable.exe
-            dist/WindowPinner-Setup.exe
+            window-pinner/dist/WindowPinner-portable.exe
+            window-pinner/dist/WindowPinner-Setup.exe
